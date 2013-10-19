@@ -48,18 +48,23 @@
 #include "gui/lwjglselectdialog.h"
 #include "gui/consolewindow.h"
 #include "gui/instancesettings.h"
+#include "gui/platform.h"
 
 #include "logic/lists/InstanceList.h"
 #include "logic/lists/MinecraftVersionList.h"
 #include "logic/lists/LwjglVersionList.h"
 #include "logic/lists/IconList.h"
+#include "logic/lists/JavaVersionList.h"
 
 #include "logic/net/LoginTask.h"
+#include "logic/net/SkinDownload.h"
+
 #include "logic/BaseInstance.h"
 #include "logic/InstanceFactory.h"
 #include "logic/MinecraftProcess.h"
 #include "logic/OneSixAssets.h"
 #include "logic/OneSixUpdate.h"
+#include "logic/JavaUtils.h"
 
 #include "logic/LegacyInstance.h"
 
@@ -70,6 +75,7 @@
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
+    MultiMCPlatform::fixWM_CLASS(this);
 	ui->setupUi(this);
 	setWindowTitle(QString("MultiMC %1").arg(MMC->version().toString()));
 
@@ -358,7 +364,7 @@ void MainWindow::on_actionReportBug_triggered()
 
 void MainWindow::on_actionNews_triggered()
 {
-	openWebPage(QUrl("http://forkk.net/tag/multimc.html"));
+	openWebPage(QUrl("http://multimc.org/posts.html"));
 }
 
 void MainWindow::on_actionAbout_triggered()
@@ -485,8 +491,8 @@ void MainWindow::doLogin(const QString &errorMsg)
 		{
 			QString user = loginDlg->getUsername();
 			if (user.length() == 0)
-				user = QString("Offline");
-			m_activeLogin = {user, QString("Offline"), QString("Player"), QString()};
+				user = QString("Player");
+			m_activeLogin = {user, QString("Offline"), user, QString()};
 			m_activeInst = m_selectedInstance;
 			launchInstance(m_activeInst, m_activeLogin);
 		}
@@ -512,6 +518,42 @@ void MainWindow::onLoginComplete()
 		connect(updateTask, SIGNAL(failed(QString)), SLOT(onGameUpdateError(QString)));
 		tDialog.exec(updateTask);
 		delete updateTask;
+	}
+
+	auto download = new SkinDownload(m_activeLogin.player_name);
+	download->start();
+
+	auto filename = MMC->metacache()->resolveEntry("skins", "skins.json")->getFullPath();
+	QFile listFile(filename);
+
+	// Add skin mapping
+	QByteArray data;
+	{
+		if(!listFile.open(QIODevice::ReadWrite))
+		{
+			QLOG_ERROR() << "Failed to open/make skins list JSON";
+			return;
+		}
+
+		data = listFile.readAll();
+	}
+
+	QJsonParseError jsonError;
+	QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &jsonError);
+	QJsonObject root = jsonDoc.object();
+	QJsonObject mappings = root.value("mappings").toObject();
+	QJsonArray usernames = mappings.value(m_activeLogin.username).toArray();
+
+	if(!usernames.contains(m_activeLogin.player_name))
+	{
+		usernames.prepend(m_activeLogin.player_name);
+		mappings[m_activeLogin.username] = usernames;
+		root["mappings"] = mappings;
+		jsonDoc.setObject(root);
+
+		// QJson hack - shouldn't have to clear the file every time a save happens
+		listFile.resize(0);
+		listFile.write(jsonDoc.toJson());
 	}
 }
 
@@ -700,4 +742,32 @@ void MainWindow::instanceEnded()
 {
 	this->show();
 	ui->actionLaunchInstance->setEnabled(m_selectedInstance);
+}
+
+void MainWindow::checkSetDefaultJava()
+{
+	QString currentJavaPath = MMC->settings()->get("JavaPath").toString();
+	if(currentJavaPath.isEmpty())
+	{
+		QLOG_DEBUG() << "Java path not set, showing Java selection dialog...";
+
+		JavaVersionPtr java;
+
+		VersionSelectDialog vselect(MMC->javalist().get(), tr("First run: select a Java version"), this, false);
+		vselect.setResizeOn(2);
+		vselect.exec();
+
+		if (!vselect.selectedVersion())
+		{
+			QMessageBox::warning(
+						this, tr("Invalid version selected"), tr("You didn't select a valid Java version, so MultiMC will select the default. "
+																 "You can change this in the settings dialog."));
+
+			JavaUtils ju;
+			java = ju.GetDefaultJava();
+		}
+
+		java = std::dynamic_pointer_cast<JavaVersion>(vselect.selectedVersion());
+		MMC->settings()->set("JavaPath", java->path);
+	}
 }

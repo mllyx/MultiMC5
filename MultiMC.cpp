@@ -5,8 +5,10 @@
 #include <QNetworkAccessManager>
 #include <QTranslator>
 #include <QLibraryInfo>
+#include <QMessageBox>
 
 #include "gui/mainwindow.h"
+#include "gui/versionselectdialog.h"
 #include "logic/lists/InstanceList.h"
 #include "logic/lists/IconList.h"
 #include "logic/lists/LwjglVersionList.h"
@@ -30,8 +32,8 @@ using namespace Util::Commandline;
 
 MultiMC::MultiMC(int &argc, char **argv) : QApplication(argc, argv)
 {
-	setOrganizationName("Forkk");
-	setApplicationName("MultiMC 5");
+    setOrganizationName("MultiMC");
+    setApplicationName("MultiMC5");
 
 	initTranslations();
 
@@ -263,17 +265,6 @@ void MultiMC::initGlobalSettings()
 
 	// Java Settings
 	m_settings->registerSetting(new Setting("JavaPath", ""));
-	QString currentJavaPath = m_settings->get("JavaPath").toString();
-	if(currentJavaPath.isEmpty())
-	{
-		QLOG_INFO() << "Java path not set, attempting to set it automatically...";
-
-		JavaUtils jut;
-		auto javas = jut.FindJavaPaths();
-
-		m_settings->set("JavaPath", std::get<JI_PATH>(javas.at(0)));
-	}
-
 	m_settings->registerSetting(new Setting("JvmArgs", ""));
 
 	// Custom Commands
@@ -303,6 +294,7 @@ void MultiMC::initHttpMetaCache()
 	m_metacache->addBase("versions", QDir("versions").absolutePath());
 	m_metacache->addBase("libraries", QDir("libraries").absolutePath());
 	m_metacache->addBase("minecraftforge", QDir("mods/minecraftforge").absolutePath());
+	m_metacache->addBase("skins", QDir("playerdata/skins").absolutePath());
 	m_metacache->Load();
 }
 
@@ -342,6 +334,15 @@ std::shared_ptr<MinecraftVersionList> MultiMC::minecraftlist()
 	return m_minecraftlist;
 }
 
+std::shared_ptr<JavaVersionList> MultiMC::javalist()
+{
+	if (!m_javalist)
+	{
+		m_javalist.reset(new JavaVersionList());
+	}
+	return m_javalist;
+}
+
 int main(int argc, char *argv[])
 {
 	// initialize Qt
@@ -350,6 +351,7 @@ int main(int argc, char *argv[])
 	// show main window
 	MainWindow mainWin;
 	mainWin.show();
+	mainWin.checkSetDefaultJava();
 
 	switch (app.status())
 	{

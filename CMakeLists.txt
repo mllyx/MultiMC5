@@ -256,6 +256,8 @@ logic/net/HttpMetaCache.h
 logic/net/HttpMetaCache.cpp
 logic/net/LoginTask.h
 logic/net/LoginTask.cpp
+logic/net/SkinDownload.h
+logic/net/SkinDownload.cpp
 
 # legacy instances
 logic/LegacyInstance.h
@@ -302,6 +304,8 @@ logic/lists/LwjglVersionList.h
 logic/lists/LwjglVersionList.cpp
 logic/lists/ForgeVersionList.h
 logic/lists/ForgeVersionList.cpp
+logic/lists/JavaVersionList.h
+logic/lists/JavaVersionList.cpp
 
 # misc model/view
 logic/EnabledItemFilter.h
@@ -348,6 +352,15 @@ IF(WIN32)
 SET(MULTIMC_RCS multimc.rc)
 ENDIF()
 
+####### X11 Stuff #######
+IF(UNIX AND NOT APPLE)
+	SET(MultiMC_QT_ADDITIONAL_MODULES ${MultiMC_QT_ADDITIONAL_MODULES} X11Extras)
+	SET(MultiMC_LINK_ADDITIONAL_LIBS ${MultiMC_LINK_ADDITIONAL_LIBS} xcb)
+	LIST(APPEND MULTIMC_SOURCES gui/platform_x11.cpp)
+ELSE()
+	LIST(APPEND MULTIMC_SOURCES gui/platform_other.cpp)
+ENDIF()
+
 
 ################################ COMPILE ################################
 
@@ -378,7 +391,7 @@ ADD_EXECUTABLE(MultiMC MACOSX_BUNDLE WIN32
 
 # Link
 TARGET_LINK_LIBRARIES(MultiMC xz-embedded unpack200 quazip libUtil libSettings libGroupView ${MultiMC_LINK_ADDITIONAL_LIBS})
-QT5_USE_MODULES(MultiMC Core Widgets Network Xml)
+QT5_USE_MODULES(MultiMC Core Widgets Network Xml ${MultiMC_QT_ADDITIONAL_MODULES})
 ADD_DEPENDENCIES(MultiMC MultiMCLauncher)
 
 option(BUILD_KEYRING_TEST "Build the simple keyring test binary" OFF)
